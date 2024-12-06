@@ -1,0 +1,218 @@
+---
+title: "Build and deploy a stroke prediction model using R"
+date: "`r Sys.Date()`"
+output: html_document
+author: "Sweta Matta"
+---
+
+# About Data Analysis Report
+
+This RMarkdown file contains the report of the data analysis done for the project on building and deploying a stroke prediction model in R. It contains analysis such as data exploration, summary statistics and building the prediction models. The final report was completed on `r date()`. 
+
+**Data Description:**
+
+According to the World Health Organization (WHO) stroke is the 2nd leading cause of death globally, responsible for approximately 11% of total deaths.
+
+This report aims to analyze a stroke dataset and develop a predictive model to identify the likelihood of stroke occurrence. The dataset contains information about 5110 individuals and 12 attributes..
+
+
+# Task One: Import data and data preprocessing
+
+## Load data and install packages
+
+```{r}
+
+# Install and load necessary libraries
+#Used for dynamic report generation, such as creating well-formatted tables and reports in R Markdown or other outputs.
+install.packages("knitr") 
+#Provides a grammar of data manipulation, enabling easy operations like filtering, selecting columns, grouping, summarizing, and more.
+install.packages("dplyr")
+#A powerful library for creating complex visualizations based on the "grammar of graphics."
+install.packages("ggplot2")
+#Used for building interactive web applications directly in R.
+install.packages("shiny")
+
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(shiny)
+
+# Load the dataset
+data <- read.csv("/Users/swetamatta/Documents/Sweta/PM/AGC_Project&R/stroke-prediction/healthcare-dataset-stroke-data.csv")
+
+# Check the first few rows of the data
+head(data)
+
+# Check for missing values in the dataset
+summary(data)
+
+
+
+```
+
+
+## Describe and explore the data
+
+```{r}
+
+# Ensure 'bmi' is numeric and handle missing values
+data$bmi <- as.numeric(as.character(data$bmi))
+data$bmi[is.na(data$bmi)] <- mean(data$bmi, na.rm = TRUE)
+
+# Convert categorical variables to factors
+data <- data %>%
+  mutate(across(c(gender, ever_married, work_type, Residence_type, smoking_status, stroke), as.factor))
+
+# Verify data types
+str(data)
+
+
+```
+
+
+
+# Task Two: Build prediction models
+
+```{r}
+# Split data into training and test sets
+set.seed(123)
+train_indices <- sample(seq_len(nrow(data)), size = 0.7 * nrow(data))
+train <- data[train_indices, ]
+test <- data[-train_indices, ]
+
+# Train a logistic regression model
+model <- glm(stroke ~ ., data = train, family = "binomial")
+
+# Display model summary
+summary(model)
+
+
+```
+
+
+
+
+# Task Three: Evaluate and select prediction models
+
+```{r}
+# Make predictions on test data
+test$predicted <- predict(model, test, type = "response")
+
+# Calculate confusion matrix
+threshold <- 0.5
+test$predicted_class <- ifelse(test$predicted > threshold, 1, 0)
+confusion_matrix <- table(test$stroke, test$predicted_class)
+
+# Accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Model Accuracy:", round(accuracy, 2)))
+
+```
+
+
+
+# Task Four: Deploy the prediction model
+
+```{r}
+server <- function(input, output) {
+  predict_stroke <- eventReactive(input$predict, {
+    # Validate inputs
+    req(input$age, input$avg_glucose_level, input$bmi)
+    
+    # Create a new data frame with user input
+    new_data <- data.frame(
+      gender = factor(input$gender, levels = levels(train$gender)),
+      age = input$age,
+      hypertension = 0,  # Default values can be adjusted or exposed to the user
+      heart_disease = 0,
+      ever_married = factor(input$ever_married, levels = levels(train$ever_married)),
+      work_type = factor(input$work_type, levels = levels(train$work_type)),
+      Residence_type = factor(input$Residence_type, levels = levels(train$Residence_type)),
+      avg_glucose_level = input$avg_glucose_level,
+      bmi = input$bmi,
+      smoking_status = factor(input$smoking_status, levels = levels(train$smoking_status))
+    )
+    
+    # Debugging: Print structures of new_data and train
+    print("Structure of new_data:")
+    print(str(new_data))
+    print("Structure of train:")
+    print(str(train))
+    
+    # Ensure all columns match the training data
+    missing_columns <- setdiff(names(train), names(new_data))
+    if (length(missing_columns) > 0) {
+      for (col in missing_columns) {
+        new_data[[col]] <- 0  # Assign a default value
+      }
+    }
+    
+    # Ensure column order matches
+    new_data <- new_data[names(train)]
+    
+    # Debugging: Verify new_data matches train
+    print("Updated structure of new_data after adjustments:")
+    print(str(new_data))
+    
+    # Predict stroke probability
+    prob <- predict(model, new_data, type = "response")
+    risk <- ifelse(prob > 0.5, "High Risk", "Low Risk")
+    return(risk)
+  })
+  
+  output$result <- renderText({
+    predict_stroke()  # Return the risk assessment
+  })
+}
+
+# Run the app
+shinyApp(ui = ui, server = server)
+
+
+
+```
+
+
+
+
+# Task Five: Findings and Conclusions
+
+1. For training, used generalized linear model (GLM's) logistic regression model that obtained a Fisher Scoring iteration:14 indicating that after 14 steps (iterations) of updating the coefficients, the Fisher scoring algorithm has found parameter estimates that meet the convergence criteria. A small number of iterations for a dataset of 5110 records indicates that the algorithm has converfed quickly and efficiently.
+
+2. For accuracy, confusion matrix is used resulting in model_accuracy = 0.95
+
+3. For prediction model, used Shiny package with function responding to user action of clikcing on 'Predict. Probability is set to 0.5 following logistic regression model to make prediction.
+In the prediction app, user would see 'High Risk' or 'Low Rish' based on the inputs provided and backend calculations done.
+
+Results: Pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
